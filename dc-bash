@@ -22,49 +22,58 @@ if [ ! -f /.dockerenv ]; then
 
    docker run --hostname $DOCKER_HOSTNAME \
       -v $SCRIPT_PATH:$SCRIPT_PATH $DOCKER_MOUNT_VOLS -v $PWD:$PWD \
-      -e "TERM=xterm-256color" $INTERACTIVE_DOCKER_SHELL \
+      -e "TERM=xterm-256color" \
+      -e "HOST_USER=$USER" \
+      -e "HOST_UID=$UID" \
+      -e "HOST_PWD=$PWD" \
+      $INTERACTIVE_DOCKER_SHELL \
+      --entrypoint /bin/bash \
       $DOCKER_IMAGE $SCRIPT_PATH/dc-bash \
-      $USER $UID $PWD $@ 
+      $@ 
 
 else
    if [ $UID -ne 0 ]; then
       $@ 
       exit $?  
    fi
-   USER=$1
-   UID_P=$2
-   INIT_PATH=$3
-   shift 3
 
-   echo "Add $USER (uid=$UID_P)"
-   useradd -u $UID_P $USER
-   su $USER -c id
+   echo "Add $HOST_USER (uid=$HOST_UID)"
+   useradd -u $HOST_UID $HOST_USER
+   su $HOST_USER -c id
 
-   if [ ! -d /home/$USER ]; then
-      echo "Creating /home/$USER"
-      mkdir /home/$USER
+   if [ ! -d /home/$HOST_USER ]; then
+      echo "Creating /home/$HOST_USER"
+      mkdir /home/$HOST_USER
    fi
 
-   chown $UID_P:$UID_P /home/$USER
+   chown $HOST_UID:$HOST_UID /home/$HOST_USER
 
-   cp /root/.bashrc /home/$USER/
-   cd $INIT_PATH
+   cp /root/.bashrc /home/$HOST_USER/
+   cd $HOST_PWD
 
    echo_buildenv()
    {
       echo export PATH=$PATH
-      echo cd $INIT_PATH
+      if [ ! -z "$ANDROID_NDK" ]; then
+        echo export ANDROID_NDK=$ANDROID_NDK
+      fi
+      if [ ! -z "$ANDROID_NDK_HOME" ]; then
+	echo export ANDROID_NDK_HOME=$ANDROID_NDK_HOME
+      fi
+      if [ ! -z "$ANDROID_HOME" ]; then
+	echo export ANDROID_HOME=$ANDROID_HOME
+      fi
+      echo cd $HOST_PWD
    }
 
    if [ "$#" -ne 0 ]; then
-      echo_buildenv > $INIT_PATH/.run.tmp.sh
-      echo $@ >> $INIT_PATH/.run.tmp.sh
-      chmod a+x $INIT_PATH/.run.tmp.sh
-      su $USER -c $INIT_PATH/.run.tmp.sh
-      rm $INIT_PATH/.run.tmp.sh
+      echo_buildenv > $HOST_PWD/.run.tmp.sh
+      echo $@ >> $HOST_PWD/.run.tmp.sh
+      chmod a+x $HOST_PWD/.run.tmp.sh
+      su $HOST_USER -c $HOST_PWD/.run.tmp.sh
+      rm $HOST_PWD/.run.tmp.sh
    else
-      echo_buildenv >> /home/$USER/.bashrc
-      su $USER
+      echo_buildenv >> /home/$HOST_USER/.bashrc
+      su $HOST_USER
    fi
-
 fi
